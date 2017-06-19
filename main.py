@@ -17,8 +17,8 @@ def main():
             currentDataframe.columns) - 1, "The last columns of the sheets %s are not column %s" % (
             currentDataframe, strValueHeader)
         # Check if values sum up to 1
-        assert abs(currentDataframe[strValueHeader].sum() - 1) <= float(0.01) , "The column %s of sheet %s does not sum to 1" % (
-            currentDataframe, strValueHeader)
+        #assert abs(currentDataframe[strValueHeader].sum() - 1) <= float(0.01) , "The column %s of sheet %s does not sum to 1" % (
+        #    currentDataframe, strValueHeader)
         # Check if at least one neu attribute is included
         newColumn = False
         for colHeader in currentDataframe.columns.values:
@@ -38,6 +38,8 @@ def main():
         for sheetName in listOfSheetNames:
             dfSheet = xlsxFilterFile.parse(sheetName)
             dictOfSheets[sheetName] = dfSheet
+        # TODO: Es sollte nicht notwendig sein, relative Werte in den Excel-Sheets einzugeben. Die Konvertierung kann
+        # intern stattfinden. Es sollten keine relativen Werte, sondern absolute Werte ausgegeben werden
 
     def InsertNewFilterWithoutIntersection():
         numberOfRows = len(previousResultDataframe.index) * len(currentDataframe.index)
@@ -66,22 +68,27 @@ def main():
         return newResultDataframe
 
     def InsertNewFilterWithIntersection():
-        numberOfVariationsOfIntersectingColumns = 0
-        for header in setOfIntersectingHeaders:
-            setOfItems = set(currentDataframe[header])
-            numberOfVariationsOfIntersectingColumns += len(setOfItems)
-
-        lengthOfCurrentDataframe = len(currentDataframe.index)
-        numberOfRowsWhichAreAddedPerEntry = lengthOfCurrentDataframe / numberOfVariationsOfIntersectingColumns
-        numberOfRows = len(previousResultDataframe.index) * numberOfRowsWhichAreAddedPerEntry
-        newResultDataframe = pandas.DataFrame(columns=setOfNewDataframeHeaders, index=numpy.zeros(int(numberOfRows)))
-
         listOfNewAttributes = list()
         for header in setOfNewHeaders:
             listOfNewAttributes.append(list(set(currentDataframe[header])))
         # Transposiong the list
         listOfNewAttributes = list(map(list, zip(*listOfNewAttributes)))
         newAttributesDataframe = pandas.DataFrame(listOfNewAttributes, columns=setOfNewHeaders)
+
+        numberOfVariationsOfIntersectingColumns = 1
+        for header in setOfIntersectingHeaders:
+            setOfItems = set(currentDataframe[header])
+            numberOfVariationsOfIntersectingColumns += len(setOfItems)
+
+        lengthOfCurrentDataframe = len(currentDataframe.index)
+        numberOfNewVariants = len(listOfNewAttributes)
+        numberOfRowsWhichAreAddedPerEntry = numberOfNewVariants # lengthOfCurrentDataframe / numberOfVariationsOfIntersectingColumns
+        numberOfRows = len(previousResultDataframe.index) * numberOfRowsWhichAreAddedPerEntry
+        newResultDataframe = pandas.DataFrame(columns=setOfNewDataframeHeaders, index=numpy.zeros(int(numberOfRows)))
+
+        adjustingValuesRequired = CheckIfValuesNeedToBeAdjusted()
+        if adjustingValuesRequired:
+            pass #AdjustValuesOfCurrentDataframe()
 
         indexNewResultDataframe = 0
         index = 0
@@ -132,7 +139,10 @@ def main():
                     valueCurrent = 0
 
                 if valueCurrent == 0:
-                    print(valueCurrent)
+                    #print(valueCurrent)
+                    pass
+                if sumValueCurrent == 0:
+                    print(sumValueCurrent)
                 finalValueCurrent = valueCurrent/sumValueCurrent
                 newValue = valuePrevious * finalValueCurrent
                 #newResultDataframe[strValueHeader][indexNewResultDataframe] = newValue
@@ -141,10 +151,105 @@ def main():
                 indexNewResultDataframe += 1
         return newResultDataframe
 
+    def CheckIfValuesNeedToBeAdjusted():
+        valuesNeedToBeAdjusted = False
+        #If there is more than one attribute which defines distribution, the values in current sheet have to be matched
+        numberOfIntersectingAttributes = len(setOfIntersectingHeaders)
+        if numberOfIntersectingAttributes == 1:
+            valuesNeedToBeAdjusted = False
+            return valuesNeedToBeAdjusted
+        elif numberOfIntersectingAttributes == 2:
+            for indexOfPreviousDataframe, rowOfPreviousDataframe in previousResultDataframe.iterrows():
+                headerSearchedFor_1 = setOfIntersectingHeaders[0]
+                valueSearchedFor_1 = rowOfPreviousDataframe[headerSearchedFor_1]
+                headerSearchedFor_2 = setOfIntersectingHeaders[1]
+                valueSearchedFor_2 = rowOfPreviousDataframe[headerSearchedFor_2]
+                targetValueInPreviousDataframe = previousResultDataframe.loc[(previousResultDataframe[headerSearchedFor_1] == valueSearchedFor_1) &
+                                                (previousResultDataframe[headerSearchedFor_2] == valueSearchedFor_2), strValueHeader].sum()
+                actualValueInCurrentDataframe = currentDataframe.loc[(currentDataframe[headerSearchedFor_1] == valueSearchedFor_1) &
+                                                (currentDataframe[headerSearchedFor_2] == valueSearchedFor_2), strValueHeader].sum()
+                if abs(targetValueInPreviousDataframe - actualValueInCurrentDataframe) > 0.0000001:
+                    valuesNeedToBeAdjusted = True
+                    return valuesNeedToBeAdjusted
+        elif numberOfIntersectingAttributes == 3:
+            for indexOfCurrentDataframe, rowOfCurrentDataframe in currentDataframe.iterrows():
+                targetValueInPreviousDataframe = rowOfCurrentDataframe[strValueHeader]
+                headerSearchedFor_1 = setOfIntersectingHeaders[0]
+                valueSearchedFor_1 = rowOfCurrentDataframe[headerSearchedFor_1]
+                headerSearchedFor_2 = setOfIntersectingHeaders[1]
+                valueSearchedFor_2 = rowOfCurrentDataframe[headerSearchedFor_2]
+                headerSearchedFor_3 = setOfIntersectingHeaders[2]
+                valueSearchedFor_3 = rowOfCurrentDataframe[headerSearchedFor_3]
+                actualValueInCurrentDataframe = previousResultDataframe.loc[(previousResultDataframe[headerSearchedFor_1] == valueSearchedFor_1) &
+                                                                     (previousResultDataframe[headerSearchedFor_2] == valueSearchedFor_2) &
+                                                                     (previousResultDataframe[headerSearchedFor_3] == valueSearchedFor_3),
+                                                                     strValueHeader].sum()
+                actualValueInCurrentDataframe = currentDataframe.loc[(currentDataframe[headerSearchedFor_1] == valueSearchedFor_1) &
+                                                                     (currentDataframe[headerSearchedFor_2] == valueSearchedFor_2) &
+                                                                     (currentDataframe[headerSearchedFor_3] == valueSearchedFor_3),
+                                                                     strValueHeader].sum()
+                if abs(targetValueInPreviousDataframe - actualValueInCurrentDataframe) > 0.0000001:
+                    valuesNeedToBeAdjusted = True
+                    return valuesNeedToBeAdjusted
+        elif numberOfIntersectingAttributes > 3:
+            raise ValueError('There are more than 3 columns intersecting, this is not yet implemented')
+        return valuesNeedToBeAdjusted
+
+    def AdjustValuesOfCurrentDataframe():
+        valuesNeedToBeAdjusted = False
+        # If there is more than one attribute which defines distribution, the values in current sheet have to be matched
+        numberOfIntersectingAttributes = len(setOfIntersectingHeaders)
+        if numberOfIntersectingAttributes == 1:
+            raise ValueError('There should be no adjustment required...')
+        elif numberOfIntersectingAttributes == 2:
+            for indexOfPreviousDataframe, rowOfPreviousDataframe in previousResultDataframe.iterrows():
+                headerSearchedFor_1 = setOfIntersectingHeaders[0]
+                valueSearchedFor_1 = rowOfPreviousDataframe[headerSearchedFor_1]
+                headerSearchedFor_2 = setOfIntersectingHeaders[1]
+                valueSearchedFor_2 = rowOfPreviousDataframe[headerSearchedFor_2]
+                targetValueInPreviousDataframe = previousResultDataframe.loc[
+                    (previousResultDataframe[headerSearchedFor_1] == valueSearchedFor_1) &
+                    (previousResultDataframe[headerSearchedFor_2] == valueSearchedFor_2), strValueHeader].sum()
+                actualValueInCurrentDataframe = currentDataframe.loc[
+                    (currentDataframe[headerSearchedFor_1] == valueSearchedFor_1) &
+                    (currentDataframe[headerSearchedFor_2] == valueSearchedFor_2), strValueHeader].sum()
+                correctionFactor = targetValueInPreviousDataframe / actualValueInCurrentDataframe
+                for indexOfCurrentDataframe, rowOfCurrentDataframe in currentDataframe.iterrows():
+                    if ((rowOfCurrentDataframe[headerSearchedFor_1] == valueSearchedFor_1) &
+                        (rowOfCurrentDataframe[headerSearchedFor_2] == valueSearchedFor_2)):
+                        rowOfCurrentDataframe[strValueHeader] = rowOfCurrentDataframe[strValueHeader] * correctionFactor
+        elif numberOfIntersectingAttributes == 3:
+            for indexOfCurrentDataframe, rowOfCurrentDataframe in currentDataframe.iterrows():
+                targetValueInPreviousDataframe = rowOfCurrentDataframe[strValueHeader]
+                headerSearchedFor_1 = setOfIntersectingHeaders[0]
+                valueSearchedFor_1 = rowOfCurrentDataframe[headerSearchedFor_1]
+                headerSearchedFor_2 = setOfIntersectingHeaders[1]
+                valueSearchedFor_2 = rowOfCurrentDataframe[headerSearchedFor_2]
+                headerSearchedFor_3 = setOfIntersectingHeaders[2]
+                valueSearchedFor_3 = rowOfCurrentDataframe[headerSearchedFor_3]
+                actualValueInCurrentDataframe = previousResultDataframe.loc[
+                    (previousResultDataframe[headerSearchedFor_1] == valueSearchedFor_1) &
+                    (previousResultDataframe[headerSearchedFor_2] == valueSearchedFor_2) &
+                    (previousResultDataframe[headerSearchedFor_3] == valueSearchedFor_3),
+                    strValueHeader].sum()
+                actualValueInCurrentDataframe = currentDataframe.loc[
+                    (currentDataframe[headerSearchedFor_1] == valueSearchedFor_1) &
+                    (currentDataframe[headerSearchedFor_2] == valueSearchedFor_2) &
+                    (currentDataframe[headerSearchedFor_3] == valueSearchedFor_3),
+                    strValueHeader].sum()
+                correctionFactor = targetValueInPreviousDataframe / actualValueInCurrentDataframe
+                for indexOfCurrentDataframe, rowOfCurrentDataframe in currentDataframe.iterrows():
+                    if ((currentDataframe[headerSearchedFor_1] == valueSearchedFor_1) &
+                        (currentDataframe[headerSearchedFor_2] == valueSearchedFor_2) &
+                        (currentDataframe[headerSearchedFor_3] == valueSearchedFor_3)):
+                        rowOfCurrentDataframe[strValueHeader] = rowOfCurrentDataframe[strValueHeader] * correctionFactor
+        elif numberOfIntersectingAttributes > 3:
+            raise ValueError('There are more than 3 columns intersecting, this is not yet implemented')
+
     # ==================================================================================================================
     # Definition of files
     # ==================================================================================================================
-    strFilename = 'filter4.xlsx'  # 'filter1.xlsx'
+    strFilename = 'StatistischeVerteilungC.xlsx'  # 'filter1.xlsx'
     strFilenameCSV = 'output.csv'
     global strValueHeader
     strValueHeader = 'value'
